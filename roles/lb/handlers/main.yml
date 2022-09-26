@@ -1,0 +1,10 @@
+---
+# handlers file for roles/lb
+    - name: reload service firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+    - name: reload service nginx
+      systemd:
+        name: nginx
+        state: reloaded

@@ -1,0 +1,7 @@
+---
+# handlers file for roles/nrpe
+  - name: restarting nrpe
+    service:
+        name: nrpe
+        state: restarted
+        enabled: true

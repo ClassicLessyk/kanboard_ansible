@@ -1,0 +1,30 @@
+---
+- hosts: allservers
+  roles: 
+  - pre_install
+  tags: pre
+
+- hosts: db
+  roles:
+  - maria_db
+  tags: db
+
+- hosts: monitoring
+  roles:
+  - nagios
+  tags: monitor
+  
+- hosts: apps, db, lb
+  roles:
+  - nrpe
+  tags: nrpe
+  
+- hosts: apps
+  roles:
+  - kanboard
+  tags: app
+
+- hosts: lb
+  roles:
+  - lb
+  tags: lb

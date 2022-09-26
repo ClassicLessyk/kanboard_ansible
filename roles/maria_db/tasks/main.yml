@@ -1,0 +1,33 @@
+---
+  - name: install MariaDB
+    ansible.builtin.yum:
+      name:
+        - mariadb-server
+        - python2-PyMySQL
+      state: latest
+  - name: start mariadb
+    ansible.builtin.service:
+        name: mariadb
+        enabled: true
+        state: started
+  - name: allow firewall port 3306
+    ansible.builtin.firewalld:
+        port: 3306/tcp
+        permanent: yes
+        state: enabled
+  - name: create kanboard user
+    ansible.builtin.mysql_user:
+        name: kanboard
+        password: "{{mysql_root_password}}"
+        priv: "*.*:ALL"
+        host: "%"
+        state: present
+    tags: user
+  - name: create kanboard db
+    ansible.builtin.mysql_db:
+        name:
+          - kanboard
+        state: present
+    tags: create
+    notify: reload service firewalld
+

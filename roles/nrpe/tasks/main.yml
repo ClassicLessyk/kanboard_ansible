@@ -1,0 +1,41 @@
+---
+    - name: installing nrpe
+      yum:
+        name: [nrpe, nagios-plugins-all, perl-Sys-Statistics-Linux]
+        state: latest
+      tags: nrpe
+    - name: starting nrpe
+      service:
+        name: nrpe
+        state: started
+        enabled: true
+      tags: nrpe_enabled
+    - name: copying
+      ansible.builtin.copy:
+        src: ../files/check_linux_stats.pl
+        dest: /usr/lib64/nagios/plugins/
+      tags: copy
+    - name: allowing to execute plugin
+      ansible.builtin.command:
+        cmd: sudo chmod +x /usr/lib64/nagios/plugins/check_linux_stats.pl
+      tags: "chmod"
+    - name: Uncommenting
+      replace:
+        path: /etc/nagios/nrpe.cfg
+        regexp: '#server_address=127.0.0.1'
+        replace: 'server_address={{ inventory_hostname }}'
+      tags: nrpe_conf
+    - name: Uncommenting
+      replace:
+        path: /etc/nagios/nrpe.cfg
+        regexp: 'allowed_hosts=127.0.0.1'
+        replace: 'allowed_hosts=127.0.0.1,10.26.0.144'
+      tags: nrpe_conf_allow
+    - name: Adding commands
+      ansible.builtin.blockinfile:
+        dest: /etc/nagios/nrpe.cfg
+        block: |
+          command[check_cpu_stats]=/usr/lib64/nagios/plugins/check_linux_stats.pl -C -w 50 -c 90
+          command[check_mem]=/usr/lib64/nagios/plugins/check_linux_stats.pl -M -w 50,50 -c 90,90
+      tags: com
+      notify: restarting nrpe

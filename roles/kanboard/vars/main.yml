@@ -1,0 +1,3 @@
+---
+# vars file for roles/kanboard
+kanboardversion: "1.2.12"

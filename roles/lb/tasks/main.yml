@@ -1,0 +1,47 @@
+---
+    - name: installing
+      ansible.builtin.yum:
+        name:
+          - nginx
+        state: latest
+    - name: starting nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+    - name: allow firewall port 80
+      ansible.builtin.firewalld:
+        service: http
+        permanent: yes
+        state: enabled
+      tags: port
+      notify: reload service firewalld
+    - name: creating conf file
+      file:
+        dest: /etc/nginx/conf.d/loadbalancer.conf
+        state: touch
+      tags: create
+    - name: adding config
+      ansible.builtin.blockinfile:
+        dest: /etc/nginx/conf.d/loadbalancer.conf
+        content: >
+          upstream backend {
+            ip_hash;
+            server 10.26.0.142;
+            server 10.26.0.143;
+            }
+
+          server {
+              listen      80;
+              server_name 10.26.0.146;
+
+          location / {
+            proxy_redirect      off;
+            proxy_set_header    X-Real-IP $remote_addr;
+            proxy_set_header    X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header    Host $http_host;
+          proxy_pass http://backend;
+            }
+          }
+      tags: edit
+      notify: reload service nginx

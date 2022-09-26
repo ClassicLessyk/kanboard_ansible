@@ -1,0 +1,90 @@
+---
+  - name: install apache
+    ansible.builtin.yum:
+      name: httpd
+      state: latest
+  - name: start apache
+    ansible.builtin.service:
+        name: httpd
+        state: started
+        enabled: true
+  - name: allow firewall port 80
+    ansible.builtin.firewalld:
+          service: http
+          permanent: yes
+          state: enabled
+    notify: reload service firewalld
+    tags: port
+  - name: removing dir view for apache
+    become: true
+    ansible.builtin.command:
+        cmd: "{{ item }}"
+    with_items:
+          - sudo sed -i "s/Options Indexes FollowSymLinks/Options FollowSymLinks/" /etc/httpd/conf/httpd.conf
+          - sudo sed -i 's/^/#&/g' /etc/httpd/conf.d/welcome.conf
+    tags: "selinux"
+  - name: install php
+    ansible.builtin.command:
+      cmd: sudo yum install php71w php71w-mysqlnd php71w-gd php71w-mbstring php71w-common php71w-ldap php71w-opcache php71w-cli php-dom -y
+    tags: php
+  - name: download kanboard
+    ansible.builtin.get_url: 
+            url: https://github.com/kanboard/kanboard/archive/v{{kanboardversion}}.tar.gz
+            dest: /var/www/html
+  - name: unarchive kanboard
+    become: true
+    ansible.builtin.unarchive:
+            src: /var/www/html/kanboard-{{kanboardversion}}.tar.gz   
+            dest: /var/www/html
+            remote_src: yes
+  - name: remove archive
+    become: true
+    ansible.builtin.file:
+            path: /var/www/html/kanboard-{{kanboardversion}}.tar.gz
+            state: absent
+  - name: move files to root htms folder
+    become: true
+    ansible.builtin.copy:
+            src: /var/www/html/kanboard-{{kanboardversion}}/
+            dest: /var/www/html/
+            remote_src: yes
+    tags: move
+  - name: removing folder
+    become: yes
+    ansible.builtin.file:
+            path: /var/www/html/kanboard-{{kanboardversion}}
+            state: absent
+    tags: remove
+  - name: change permissions
+    become: true
+    ansible.builtin.command:
+            cmd: chown -R apache:apache /var/www/html/
+    tags: chmod
+  - name: download mariadb client
+    ansible.builtin.yum:
+           name:
+            - mariadb-server
+           state: latest
+  - name: start mariadb
+    ansible.builtin.service:
+          name: mariadb
+          enabled: true
+          state: started
+  - name: copying file to apps
+    ansible.builtin.copy:
+          src: ../files/config.php
+          dest: /var/www/html/
+    tags: config
+  - name: remove old config file
+    ansible.builtin.file:
+          path: /var/www/html/config.default.php
+          state: absent
+  - name: tell apache to use php
+    ansible.builtin.blockinfile:
+      path: /etc/httpd/conf/httpd.conf
+      block: |
+        <FilesMatch \.php$>
+          SetHandler application/x-httpd-php
+        </FilesMatch>
+    notify: reload service apache
+  

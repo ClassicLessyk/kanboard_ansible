@@ -1,0 +1,14 @@
+---
+# handlers file for roles/nagios
+    - name: reload service firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+    - name: restarting nagios
+      service:
+        name: nagios
+        state: restarted
+    - name: restart httpd
+      service:
+        name: httpd
+        state: restarted

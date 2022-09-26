@@ -1,0 +1,216 @@
+---
+    - name: Install nagios packages and common plugins
+      yum:
+        name: ['nagios', 'nagios-common', 'nagios-plugins-all', 'nagios-plugins-tcp', 'nagios-plugins-http',
+           'nagios-plugins-load', 'nagios-plugins-nrpe', 'nagios-plugins-uptime', 'nagios-plugins-swap',
+           'nagios-plugins-ping', 'nagios-plugins-procs', 'nagios-plugins-users', 'nagios-plugins-disk',
+           'nagios-plugins-dns', 'libsemanage-python', python-requests, perl-Sys-Statistics-Linux]
+        state: present
+      tags: install_all
+      become: true
+    - name: starting nagios
+      service:
+        name: nagios
+        state: started
+        enabled: true
+    - name: add commands to commands.cfg 
+      ansible.builtin.blockinfile:
+        dest: /etc/hosts
+        block: |
+          10.26.0.142 app1
+          10.26.0.143 app2
+          10.26.0.146 lb
+          10.26.0.145 db
+      tags: adding_hosts
+    - name: installing pip
+      yum:
+        name: python-pip
+        state: present 
+      tags: pip
+    - name: installing passlib
+      pip:
+        name: passlib
+        state: present
+      tags: passlib
+    - name: setting admin password
+      htpasswd:
+        path: "/etc/nagios/passwd"
+        name: nagiosadmin
+        password: "{{nagios_admin_password}}"
+        crypt_scheme: md5_crypt
+      tags: pass
+    - name: allowing ports for firewall
+      ansible.builtin.firewalld:
+          service: http  
+          permanent: yes
+          state: enabled
+      tags: firewall
+      notify: reload service firewalld
+    - name: add commands to commands.cfg 
+      ansible.builtin.blockinfile:
+        dest: /etc/nagios/objects/commands.cfg
+        block: |
+          define command {
+            command_name    check_cpu_remote
+            command_line    /usr/lib64/nagios/plugins/check_nrpe -H $HOSTNAME$ -c check_cpu_stats
+          }
+          define command {
+            command_name    check_mem_remote
+            command_line    /usr/lib64/nagios/plugins/check_nrpe -H $HOSTNAME$ -c check_mem
+          }
+          define command {
+            command_name    check_cpu_local
+            command_line    /usr/lib64/nagios/plugins/check_linux_stats.pl -C -w 50 -c 90
+          }
+          define command {
+            command_name    check_mem_local
+            command_line    /usr/lib64/nagios/plugins/check_linux_stats.pl -M -w 50,50 -c 90,90
+          }
+          define command {
+            command_name    check_nrpe
+            command_line    /usr/lib64/nagios/plugins/check_nrpe -H $HOSTNAME$ -c $ARG2$
+          }
+          define command {
+            command_name notify-host-by-discord
+            command_line /usr/lib64/nagios/plugins/send-host.py "$NOTIFICATIONTYPE$" "$HOSTNAME$" "$HOSTSTATE$" "$HOSTADDRESS$" "$HOSTOUTPUT$" 
+          }
+
+          define command {
+            command_name notify-service-by-discord
+            command_line /usr/lib64/nagios/plugins/send-service.py "$NOTIFICATIONTYPE$" "$SERVICEDESC$" "$HOSTNAME$" "$HOSTADDRESS$" "$SERVICESTATE$" "$SERVICEOUTPUT$"
+          }
+      tags: com
+    - name: add services to localhost.cfg 
+      ansible.builtin.blockinfile:
+        dest: /etc/nagios/objects/localhost.cfg
+        block: |
+          define service{
+            use                             generic-service
+            host_name                       localhost
+            service_description             CPU INFO
+            check_command                   check_cpu_local
+            notifications_enabled           1
+            check_interval                  1
+          }
+          define service{
+            use                             generic-service
+            host_name                       localhost
+            service_description             MEM INFO
+            check_command                   check_mem_local
+            notifications_enabled           1
+            check_interval                  1
+          }
+      tags: serv
+    - name: Uncommenting a line with servers
+      replace:
+        path: /etc/nagios/nagios.cfg
+        regexp: '#cfg_dir=/etc/nagios/servers'
+        replace: 'cfg_dir=/etc/nagios/servers'
+      tags: servers
+    - name: Creating servers folder
+      file:
+        path: /etc/nagios/servers
+        state: directory
+      tags: mkdir
+    - name: Creating node files
+      file:
+        path: /etc/nagios/servers/{{ item }}
+        state: touch
+      with_items: [app1.cfg, app2.cfg, lb.cfg, db.cfg]
+      tags: mkfiles
+    - name: adding hosts
+      ansible.builtin.blockinfile:
+        dest: /etc/nagios/servers/{{ item.name }}.cfg
+        block: | 
+          define host{
+            use                     linux-server
+            host_name               {{ item.name }}
+            alias                   {{ item.name }}
+            address                 {{ item.ip }}
+          }
+
+          define service{
+            use                     generic-service
+            host_name               {{ item.name }}
+            service_description     Current Users
+            check_command           check_nrpe!{{ item.name }}!check_users
+          }
+
+          define service{
+            use                     generic-service
+            host_name               {{ item.name }}
+            service_description     Total Processes
+            check_command           check_nrpe!{{ item.name }}!check_total_procs
+          }
+
+          define service{
+            use                     generic-service
+            host_name               {{ item.name }}
+            service_description     Current Load
+            check_command           check_nrpe!{{ item.name }}!check_load
+          }
+          define service{
+          use                             generic-service
+          host_name                       {{ item.name }}
+          service_description             CPU INFO
+          check_command                   check_cpu_remote!{{ item.name }}
+          notifications_enabled           1
+          check_interval                  1
+          }
+          define service{
+          use                             generic-service
+          host_name                       {{ item.name }}
+          service_description             RAM INFO
+          check_command                   check_mem_remote!{{ item.name }}
+          notifications_enabled           1
+          check_interval                  1
+          }
+      loop:
+        - { name: 'app1', ip: '10.26.0.142' }
+        - { name: 'app2', ip: '10.26.0.143' }
+        - { name: 'lb', ip: '10.26.0.146' }
+        - { name: 'db', ip: '10.26.0.145' }
+      tags: hosts
+      notify: restart httpd
+    - name: copying
+      ansible.builtin.copy:
+        src: /root/check_linux_stats.pl
+        dest: /usr/lib64/nagios/plugins/
+      tags: copy
+    - name: allowing to execute plugin
+      ansible.builtin.command:
+        cmd: sudo chmod +x /usr/lib64/nagios/plugins/check_linux_stats.pl
+    - name: copying config files
+      ansible.builtin.copy:
+        src: '{{ item }}'
+        dest: /etc/nagios/objects/
+      with_fileglob:
+        - ../files/*.cfg
+    - name: copying plugins
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /usr/lib64/nagios/plugins/
+      with_fileglob:
+        - ../files/*.py
+    - name: giving exec permissions
+      ansible.builtin.command:
+        cmd: '{{ item }}'
+      with_items:
+       - chmod +x /usr/lib64/nagios/plugins/send-host.py
+       - chmod +x /usr/lib64/nagios/plugins/send-service.py
+    - name: installing python3
+      yum:
+        name: [python3, python3-pip]
+        state: present
+      tags: python
+    - name: installing plugin dependency
+      ansible.builtin.command:
+        cmd: pip3 install discord_webhook async_generator
+      tags: pip_install
+    - name: Replacing library for the older python version
+      replace:
+        path: /usr/local/lib/python3.6/site-packages/discord_webhook/async_webhook.py
+        regexp: 'contextlib'
+        replace: 'async_generator'
+      tags: repl
+      notify: restarting nagios

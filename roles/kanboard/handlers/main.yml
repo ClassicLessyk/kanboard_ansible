@@ -1,0 +1,10 @@
+---
+# handlers file for roles/kanboard
+  - name: reload service apache
+    service:
+        name: httpd
+        state: restarted
+  - name: reload service firewalld
+    systemd:
+        name: firewalld
+        state: reloaded

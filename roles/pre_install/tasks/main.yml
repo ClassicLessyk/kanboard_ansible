@@ -1,0 +1,37 @@
+---
+    - name: disabling selinux
+      command:
+        cmd: sed -i 's/SELINUX=.*/SELINUX=disabled/g' /etc/selinux/config
+      tags: se
+    - name: yum update
+      ansible.builtin.yum: 
+        name: '*' 
+        state: latest
+    - name: epel_install
+      ansible.builtin.yum:
+        name:
+          - https://mirror.webtatic.com/yum/el7/webtatic-release.rpm
+          - epel-release
+          - nano
+        state: latest
+    - name: yum update
+      ansible.builtin.yum: 
+        name: '*' 
+        state: latest
+    - name: allow firewall port 5666
+      ansible.builtin.firewalld:
+        port: 5666/tcp
+        permanent: yes
+        state: enabled
+      tags: allow
+    - name: reload service firewalld
+      systemd:
+        name: firewalld
+        state: reloaded
+      tags: reload
+    - name: installing stress
+      yum:
+        name: stress
+        state: present
+    - name: Unconditionally reboot the machine with all defaults
+      ansible.builtin.reboot:
