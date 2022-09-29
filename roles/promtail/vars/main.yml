@@ -1,0 +1,3 @@
+---
+# vars file for roles/promtail
+loki_ip: '10.26.0.91'

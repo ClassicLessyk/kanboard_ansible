@@ -1,0 +1,88 @@
+---
+# tasks file for roles/promtail
+- name: unzipping promtail
+  ansible.builtin.unarchive:
+    src: https://github.com/grafana/loki/releases/download/v2.6.1/promtail-linux-amd64.zip
+    dest: /tmp
+    remote_src: yes
+- name: moving promtail 
+  command:
+    cmd: sudo mv /tmp/promtail-linux-amd64 /usr/local/bin/promtail
+- name: creating directories
+  ansible.builtin.file:
+    dest: '{{ item }}'
+    state: directory 
+  loop:
+  - /etc/promtail
+  - /data/promtail
+- name: creating a cofnig file
+  file:
+    dest: /etc/promtail/config.yaml
+    state: touch
+- name: editing config
+  ansible.builtin.blockinfile:
+    dest: /etc/promtail/config.yaml
+    block: |
+      server:
+        http_listen_port: 9080
+        grpc_listen_port: 0
+
+      positions:
+        filename: /data/promtail/positions.yaml
+
+      clients:
+        - url: http://{{ loki_ip }}:3100/loki/api/v1/push
+
+      scrape_configs:
+      - job_name: system
+        static_configs:
+        - targets:
+            - localhost
+          labels:
+            job: varlogs
+            __path__: /var/log/*log
+            host: '{{ item.name }}'
+      - job_name: grafanalogs
+        static_configs:
+        - targets:
+            - localhost
+          labels:
+            job: grafana
+            __path__: /var/log/grafana/grafana.log
+      - job_name: httpd_logs
+        static_configs:
+        - targets:
+            - localhost
+          labels:
+            job: grafana
+            __path__: /var/log/httpd/*
+  when: inventory_hostname == item.ip
+  loop:
+     - { name: app1, ip: '10.26.0.142' }
+     - { name: app2, ip: '10.26.0.143' }
+     - { name: lb, ip: '10.26.0.146' }
+     - { name: db, ip: '10.26.0.145' }
+     - { name: monitoring, ip: '10.26.0.144' }
+     - { name: loki, ip: '10.26.0.91' }
+  
+- name: creating a service file
+  file:
+    dest: /etc/systemd/system/promtail.service
+    state: touch
+  notify: restart promtail
+- name: editing config
+  ansible.builtin.blockinfile:
+    dest: /etc/systemd/system/promtail.service
+    block: |
+      [Unit]
+      Description=Promtail service
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=root
+      ExecStart=/usr/local/bin/promtail -config.file /etc/promtail/config.yaml
+
+      [Install]
+      WantedBy=multi-user.target
+  

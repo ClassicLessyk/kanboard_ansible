@@ -1,0 +1,6 @@
+---
+# handlers file for roles/grafana_loki
+- name: firewall reload
+  ansible.builtin.systemd:
+    name: firewalld
+    state: reloaded

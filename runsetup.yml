@@ -18,7 +18,7 @@
   roles:
   - nrpe
   tags: nrpe
-  
+
 - hosts: apps
   roles:
   - kanboard
@@ -28,3 +28,12 @@
   roles:
   - lb
   tags: lb
+
+# - hosts: loki
+#   roles:
+#   - grafana_loki
+#   tags: loki
+- hosts: apps, db, lb, monitoring, loki
+  roles: 
+  - promtail
+  tags: prom

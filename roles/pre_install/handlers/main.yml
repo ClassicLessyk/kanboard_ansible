@@ -1,2 +1,6 @@
 ---
 # handlers file for /ansible-playbooks/roles/pre_install
+    - name: reload service firewalld
+      systemd:
+        name: firewalld
+        state: reloaded

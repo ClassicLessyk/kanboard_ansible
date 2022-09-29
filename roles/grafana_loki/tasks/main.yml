@@ -1,0 +1,65 @@
+---
+# tasks file for roles/grafana_loki
+- name: installing grafana 
+  yum:
+    name: https://dl.grafana.com/enterprise/release/grafana-enterprise-9.1.6-1.x86_64.rpm
+    state: present
+- name: starting grafana
+  service:
+    name: grafana-server
+    state: started
+    enabled: true
+- name: allowing port 3000 for firewall
+  ansible.builtin.firewalld:
+    port: 3000/tcp
+    permanent: yes
+    state: enabled
+  notify: firewall reload
+- name: make a loki dir
+  file:
+    path: /loki
+    state: directory
+- name: downloading loki
+  ansible.builtin.get_url:
+    url: https://github.com/grafana/loki/releases/download/v2.6.1/loki-linux-amd64.zip
+    dest: /loki
+- name: unzipping loki
+  ansible.builtin.unarchive:
+    src: /loki/loki-linux-amd64.zip
+    dest: /loki
+    remote_src: yes
+- name: downloading promtail
+  ansible.builtin.get_url:
+    url: https://github.com/grafana/loki/releases/download/v2.6.1/promtail-linux-amd64.zip
+    dest: /loki
+- name: unzipping promtail
+  ansible.builtin.unarchive:
+    src: /loki/promtail-linux-amd64.zip
+    dest: /loki
+    remote_src: yes
+- name: removing zip files
+  ansible.builtin.command:
+    cmd: sudo rm -rvf /loki/*.zip
+- name: downloading promtail config
+  ansible.builtin.copy:
+    copy: ../files/promtail-local-config.yaml
+    dest: /loki
+- name: downloading loki config
+  ansible.builtin.copy:
+    src: ../files/loki-local-config.yaml
+    dest: /loki
+- name: allowing ports 3100 for firewall
+  ansible.builtin.firewalld:
+    port: '{{ item }}'
+    permanent: yes
+    state: enabled
+  loop: [3100/tcp, 9080/tcp]
+- name: configuting loki
+  command:
+    cmd: /loki/loki-linux-amd64 -config.file=/loki/loki-local-config.yaml
+- name: configuting promtail
+  command:
+    cmd: /loki/promtail-linux-amd64 -config.file=/loki/promtail-local-config.yaml
+
+
+    

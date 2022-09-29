@@ -24,14 +24,10 @@
         permanent: yes
         state: enabled
       tags: allow
-    - name: reload service firewalld
-      systemd:
-        name: firewalld
-        state: reloaded
-      tags: reload
+      notify: reload service firewalld
     - name: installing stress
       yum:
-        name: stress
+        name: [stress, wget, unzip]
         state: present
     - name: Unconditionally reboot the machine with all defaults
       ansible.builtin.reboot:
